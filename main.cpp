@@ -8,6 +8,5 @@ int main(int argc, char *argv[])
     w.setGeometry(WINDOW_X,WINDOW_Y,WINDOW_WIDTH,WINDOW_HEIGHT);
     w.show();
 
-
     return a.exec();
 }

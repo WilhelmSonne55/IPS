@@ -23,14 +23,18 @@ class MainWindow : public QMainWindow
 public:
     explicit MainWindow(QWidget *parent = nullptr);
     void loadFile(const QString &fileName);
-
-    ~MainWindow();
-private:
-
+        ~MainWindow();
 
 private slots:
     void action();
-    void menu();
+    //void hsy();
+
+    void slidemenu();
+
+    void hue(int delta);
+    void saturation(int delta);
+    void brightness(int delta);
+
 
     bool maybeSave();
     void open();
