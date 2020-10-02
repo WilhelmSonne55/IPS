@@ -1,17 +1,18 @@
 {
     "version": "2.0.0",
-    "tasks": [{
-        "taskName": "demo1 Debug",
-        "type": "shell",
-        "command": "cmd",
-        "args": [
-            "/c",
-            "${workspaceRoot}/build.cmd",
-            "debug"
-        ],
-        "group": {
-            "kind": "build",
-            "isDefault": true
-        }
-    }]
+            "type": "shell",
+            "command":"make",
+            "args":[]
+            /*
+            "command": "g++", // 要使用的编译器
+            "args": [
+                "-g",
+                "-std=c++11",
+                "${file}",
+                //"-o",
+                "-ID:\\workspace\\Imgui test\\include",
+                "-LD:\\workspace\\Imgui test\\lib"
+                //"${fileBasenameNoExtension}.exe "
+            ]// 编译,
+            */
 }
