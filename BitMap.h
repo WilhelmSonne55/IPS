@@ -10,29 +10,6 @@
 //========================================
 //  Function
 //========================================
- class DLL BitMap
-{
-	public:
-	
-	BitMap(unsigned short* _data, int _width, int _height, int channel);
-    unsigned short* get_data( void ) const   { return data; }
-    unsigned int get_width( void ) const   { return width; }
-    unsigned int get_height( void ) const   { return height; }
-    unsigned int get_channel( void ) const   { return channel; }
-    unsigned int get_size( void ) const   { return size; }
-	unsigned short* get_Image (void) {return proImage;};
-	void refresh();
-
-	private:
-	
-	unsigned short* data;
-	unsigned short* proImage;
-	unsigned int width;
-	unsigned int height;
-	unsigned int channel;
-	unsigned int size;	
-};
-
 typedef enum DLL 
 {
 	RED_PIXEL,
@@ -83,6 +60,46 @@ typedef struct{
 	int RGBvalue[MAX_PIXEL] = {0};
 	int HSVvalue[HSV_MAX_TYPE] = {0};
 }COLOR_ITEMS;
+
+typedef struct{
+	float* RHistogram;
+	float* GHistogram;
+	float* BHistogram;
+	float* YHistogram;
+}Histogram_Type;
+
+class DLL BitMap
+{
+	public:
+	
+	BitMap(unsigned short* _data, int _width, int _height, int _channel, int _depth);
+    unsigned short* get_data( void ) const   { return data; }
+    unsigned int get_width( void ) const   { return width; }
+    unsigned int get_height( void ) const   { return height; }
+    unsigned int get_channel( void ) const   { return channel; }
+    unsigned int get_size( void ) const   { return size; }
+    unsigned int get_depth( void ) const   { return depth; }
+	unsigned short* get_Image (void) {return proImage;};
+	float* getYhistogram (void) {return histogram.YHistogram; }
+	float* getRhistogram (void) {return histogram.RHistogram; }
+	float* getGhistogram (void) {return histogram.GHistogram; }
+	float* getBhistogram (void) {return histogram.BHistogram; }
+
+	void refresh();
+	void updateHistogram();
+
+	private:
+	Histogram_Type histogram;
+	unsigned short* data;
+	unsigned short* proImage;
+
+	unsigned int binSize;
+	unsigned int depth;
+	unsigned int width;
+	unsigned int height;
+	unsigned int channel;
+	unsigned int size;	
+};
 
 class DLL Processor
 {
