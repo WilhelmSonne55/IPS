@@ -1,6 +1,6 @@
 #include "BitMap.h"
 #include "stdio.h"
-#if 0
+#if 1
 #include<iostream>
 using namespace std;
 #endif
@@ -12,11 +12,12 @@ using namespace std;
 #define SIXTY_DEGREE 60
 #define RGB_SCALE 100
 #define HSV_SCALE 0.3
+#define MAX_BIN 256
 
 #define BOUND(x,min, max) ((x) > (max) ? (max): ((x) < (min)? (min): (x)))
 #define MAXRGB(R,G,B) (R)>(G)?(R>B?R:B):((G)>(B)?(G):(B))
 #define MINRGB(R,G,B) (R)<(G)?(R<B?R:B):((G<B)?G:B)
-
+#define DEPTH_TO_INDEX(value) (value*255/MAX_DEPTH)
 //========================================
 //  CUDA Function
 //========================================
@@ -191,23 +192,121 @@ __global__ void ConvertRGBtoHSV(unsigned short* devPtr, int width, int height, i
 	}
 }
 
+__global__ void getHistogram(unsigned short* devPtr, int width, int height, float* devHistogram)
+{
+	int tidx = blockIdx.x * blockDim.x + threadIdx.x;
+	int tidy = blockIdx.y * blockDim.y + threadIdx.y;
+
+	//thread in the same blocks using same share memory
+	int t = threadIdx.x + blockDim.x * threadIdx.y;
+	//total thread per block: 32*32
+	int nt = blockDim.x * blockDim.y;
+
+	int offset = tidx + tidy * width;
+	unsigned short RIndex, GIndex, BIndex;
+
+	__shared__ unsigned int Rtemp[MAX_BIN];
+	//__shared__ unsigned int Gtemp[MAX_BIN];
+	//__shared__ unsigned int Btemp[MAX_BIN];
+
+	//same block using same share memory
+	//even each block only 1024 threads, array size > 1024
+	//all need (0 ~ MAX_BIN) to reset each block
+	for(int i = t; i < MAX_BIN; i+=nt)
+	{
+		Rtemp[i] = 0;
+		//Gtemp[i] = 0;
+		//Btemp[i] = 0;
+	}
+	__syncthreads();
+
+	if(tidx <= width && tidy <= height)
+	{
+		RIndex = DEPTH_TO_INDEX(devPtr[offset*4 + RED_PIXEL]);
+		//GIndex = devPtr[offset*4 + GREEN_PIXEL];
+		//BIndex = devPtr[offset*4 + BLUE_PIXEL];
+		printf("RIndex:%d, devPtr[offset*4 + RED_PIXEL]:%d\n", RIndex, devPtr[offset*4 + RED_PIXEL]);
+
+		atomicAdd(&Rtemp[RIndex], 1);
+		//atomicAdd(&Gtemp[GIndex], 1);
+		//atomicAdd(&Btemp[BIndex], 1);
+	}
+	__syncthreads();
+
+	for(int i = t; i < MAX_BIN; i+=nt)
+	{
+		//devHistogram[RED_PIXEL][i] = Rtemp[i];
+		atomicAdd(&(devHistogram[i]), Rtemp[i]);
+		//atomicAdd(&(devHistogram[GREEN_PIXEL][i]), Gtemp[i]);
+		//atomicAdd(&(devHistogram[BLUE_PIXEL][i]), Btemp[i]);
+	}
+	
+}
+
 //========================================
 //  Function
 //========================================
-BitMap::BitMap(unsigned short* _data, int _width, int _height, int _channel)
+BitMap::BitMap(unsigned short* _data, int _width, int _height, int _channel, int _depth)
 {
 	data = _data;
 	width = _width;
 	height = _height;
 	channel = _channel;
+	depth = _depth;
+
+	//binSize = 1<<depth;
+	binSize = MAX_BIN;
 	size = width*height*channel*sizeof(unsigned short);	
+
 	proImage = new unsigned short[size];
 	memcpy(proImage , data, size);
+
+	histogram.RHistogram = new float [binSize];
+	histogram.GHistogram = new float [binSize];
+	histogram.BHistogram = new float [binSize];
+	histogram.YHistogram = new float [binSize];	
+	memset(histogram.RHistogram, 0, sizeof(float)*binSize);
+
+	//updateHistogram();
 }
 
 void BitMap::refresh()
 {
 	memcpy(proImage, data, size);
+}
+
+void BitMap::updateHistogram()
+{
+	int bx = (width + BLOCKSIZE - 1)/BLOCKSIZE;
+	int by = (height + BLOCKSIZE - 1)/BLOCKSIZE;
+	dim3 gridSize(bx, by);
+	dim3 blockSize(BLOCKSIZE, BLOCKSIZE);
+	unsigned short* devPtr;
+	Histogram_Type devHistogram;
+
+	//histogram malloc
+	cudaMalloc((void**)&devHistogram.RHistogram, sizeof(float)*MAX_BIN);
+	cudaMemset( devHistogram.RHistogram, 0x0, sizeof(float)*MAX_BIN);
+	
+	//image malloc
+	cudaMalloc( (void**)&devPtr, size);
+	cudaMemcpy( devPtr, proImage, size, cudaMemcpyHostToDevice);
+
+	//prefer shared memory larger than L1 cache
+	//cudaThreadSetCacheConfig(cudaFuncCachePreferShared);
+
+	getHistogram<<<gridSize, blockSize>>>(devPtr, width, height, devHistogram.RHistogram);
+	
+	for(int i = 0; i<MAX_PIXEL; i++)
+	{
+		cudaMemcpy(histogram.RHistogram, devHistogram.RHistogram, sizeof(float)*MAX_BIN , cudaMemcpyDeviceToHost );
+	}
+	cout<<"RGBHistogram[i]:"<<histogram.RHistogram[0]<<endl;
+
+
+	cudaFree(&devHistogram.RHistogram);
+
+	cudaFree(devPtr);	
 }
 
 void Processor::process(BitMap* bitmap, COLOR_ITEMS uiSlider)
@@ -226,6 +325,8 @@ void Processor::process(BitMap* bitmap, COLOR_ITEMS uiSlider)
 	//HSY
 	AdjustHSV(bitmap,  uiSlider.HSVvalue);
 	
+	bitmap->updateHistogram();
+
 	memcpy(&slider, &uiSlider, sizeof(COLOR_ITEMS));
 }
 
@@ -254,8 +355,6 @@ void Processor::AdjustColor(BitMap* bitmap, int* RGBvalue)
 	cudaFree(devRGBvalue);
 	cudaFree(devPtr);
 }
-
-static bool check = 0;
 
 void CPUHSVtoRGB(unsigned short* devPtr, float H, float S, float V)
 {
@@ -299,15 +398,11 @@ void CPUHSVtoRGB(unsigned short* devPtr, float H, float S, float V)
 			B = q;
 			break;
 	}
-		if(check)
-		printf(" =>h:%d, H:%f, S:%f, V:%f f:%f, R:%f, G:%f, B:%f \n", (int)h, H,S, V, f,R*255, G*255, B*255);
 
-			check = false;
-
-		devPtr[0] = R*MAX_DEPTH;
-		devPtr[1] = G*MAX_DEPTH;
-		devPtr[2] = B*MAX_DEPTH;	
-		//cout<<"R:"<<R<<" G:"<<G<<" B:"<<B<<endl;
+	devPtr[0] = R*MAX_DEPTH;
+	devPtr[1] = G*MAX_DEPTH;
+	devPtr[2] = B*MAX_DEPTH;	
+	//cout<<"R:"<<R<<" G:"<<G<<" B:"<<B<<endl;
 }
 
 void CPUConvertRGBtoHSV(unsigned short* devPtr, int width, int height, int* HSVvalue)
@@ -415,12 +510,6 @@ void CPUConvertRGBtoHSV(unsigned short* devPtr, int width, int height, int* HSVv
 					V = BOUND(V+(float)HSVvalue[BRI_MAGENTA_TYPE]*0.01,0,1);
 				}
 				
-				if(x == 0 && y == 0)
-				{
-					printf(" H:%f, S:%f, V:%f, R:%f, G:%f, B:%f \n", H, S, V,R*255/MAX_DEPTH, G*255/MAX_DEPTH, B*255/MAX_DEPTH);
-					check = true;
-				}
-
 				CPUHSVtoRGB(&devPtr[offset*4], H, S, V);
 			}
 		}
@@ -437,7 +526,6 @@ void Processor::AdjustHSV(BitMap* bitmap, int* HSVvalue)
 	
 	//CPUConvertRGBtoHSV(bitmap->get_Image(), width, height, HSVvalue);
 	
-	#if 1
 	cudaMalloc((void**)&devHSVvalue, sizeof(int)*HSV_MAX_TYPE);
 	cudaMemcpy( devHSVvalue, HSVvalue, sizeof(int)*HSV_MAX_TYPE, cudaMemcpyHostToDevice );
 	
@@ -455,5 +543,4 @@ void Processor::AdjustHSV(BitMap* bitmap, int* HSVvalue)
 
 	cudaFree(devHSVvalue);
 	cudaFree(devPtr);	
-	#endif
 }

@@ -53,10 +53,14 @@ using namespace gl;
 //========================================
 #define PIC_WINDOW_HEIGHT 540
 #define PIC_WINDOW_WIDTH  960
+#define WIDGET_WIDTH 200
 
 static char* Color[] = { "Red","Ora","Yel", "Gre", "Cya", "Blu", "Vio", "Mag" };
 static float hsvValue[8] = {0,0.5,1,2,3,4,5,6};
 static unsigned short hsvIndex = 0;
+static COLOR_ITEMS uiSlider;
+float Yhistogram[256] = { 0.5f, 0.20f, 0.80f, 0.60f, 0.25f };
+static bool* bMainWindow;
 //========================================
 //  Definition
 //========================================
@@ -96,6 +100,68 @@ unsigned short* LoadTextureFromFile(const char* filename, GLuint* out_texture, i
 }
 
 
+void MainWindow(BitMap* pixel)
+{
+    ImGuiWindowFlags window_flags;
+
+    window_flags |= ImGuiWindowFlags_NoScrollbar;
+    window_flags |= ImGuiWindowFlags_MenuBar;
+    window_flags |= ImGuiWindowFlags_NoResize;
+    window_flags |= ImGuiWindowFlags_NoCollapse;
+
+    if(bMainWindow == NULL)
+        bMainWindow = new bool(true);
+
+    ImGui::Begin("Main Widget", bMainWindow, window_flags);
+
+    ImGui::Text("Luminous Histogram");
+    ImGui::Separator();
+    ImVec2 size = ImGui::GetItemRectSize();
+    size.y = WIDGET_WIDTH;
+    ImGui::PlotHistogram("##values", pixel->getRhistogram(), 300, 0, NULL, 0.0f, 1.0f, size);
+
+    //RGB
+    if (ImGui::CollapsingHeader("RGB"))
+    {
+        ImGui::SliderInt("R", (int*)&uiSlider.RGBvalue[RED_PIXEL], -100, 100);
+        ImGui::SliderInt("G", (int*)&uiSlider.RGBvalue[GREEN_PIXEL], -100, 100); 
+        ImGui::SliderInt("B", (int*)&uiSlider.RGBvalue[BLUE_PIXEL], -100, 100);
+    }
+
+    //HSV
+    if (ImGui::CollapsingHeader("HSV"))
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            if (i > 0)
+                ImGui::SameLine();
+            ImGui::PushID(0);
+            ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 0.9f, 0.6f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 1.0f, 0.7f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 0.8f, 0.8f));
+            if (ImGui::Button(Color[i]))
+                hsvIndex = i;
+            ImGui::PopStyleColor(3);
+            ImGui::PopID();
+        }
+
+        ImGui::PushID(hsvIndex);
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.2f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.6f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_FrameBgActive, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.7f, 0.5f));
+        ImGui::PushStyleColor(ImGuiCol_SliderGrab, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.2f, 0.9f));
+        ImGui::SliderInt("H", (int*)&uiSlider.HSVvalue[hsvIndex *3], -100, 100);
+        ImGui::SliderInt("S", (int*)&uiSlider.HSVvalue[hsvIndex *3 +1], -100, 100);
+        ImGui::SliderInt("V", (int*)&uiSlider.HSVvalue[hsvIndex *3 +2], -100, 100);
+        ImGui::PopStyleColor(4);
+        ImGui::PopID();
+    }
+
+    bool show_demo_window = true;
+    ImGui::ShowDemoWindow(&show_demo_window);
+
+    ImGui::End();
+}
 
 
 int main(int, char**)
@@ -183,9 +249,6 @@ int main(int, char**)
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != NULL);
 
-    // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     int my_image_width = 0;
@@ -193,8 +256,7 @@ int main(int, char**)
     GLuint my_image_texture = 0;
     unsigned short* image = LoadTextureFromFile("345.jpg", &my_image_texture, &my_image_width, &my_image_height);
     Processor processor;
-    BitMap* pixel = new BitMap(image, my_image_width, my_image_height, 4);
-    COLOR_ITEMS uiSlider;
+    BitMap* pixel = new BitMap(image, my_image_width, my_image_height, 4, 16);
 
     // Main loop
     while (!glfwWindowShouldClose(window))
@@ -210,71 +272,7 @@ int main(int, char**)
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
-
-        // 2. Show a simple window that we create ourselves. We use a Begin/End pair to created a named window.
-        {
-            static float f = 0.0f;
-
-            ImGui::Begin("Hello, world!");                          // Create a window called "Hello, world!" and append into it.
-
-            ImGui::Text("This is some useful text.");               // Display some text (you can use a format strings too)
-            ImGui::Checkbox("Demo Window", &show_demo_window);      // Edit bools storing our window open/close state
-            ImGui::Checkbox("Another Window", &show_another_window);
-
-            ImGui::SliderFloat("float", &f, 0.0f, 1.0f);            // Edit 1 float using a slider from 0.0f to 1.0f
-            ImGui::ColorEdit3("clear color", (float*)&clear_color); // Edit 3 floats representing a color
-
-            ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-
-            ImGui::SliderInt("R", (int*)&uiSlider.RGBvalue[RED_PIXEL], -100, 100);
-            ImGui::SliderInt("G", (int*)&uiSlider.RGBvalue[GREEN_PIXEL], -100, 100); 
-            ImGui::SliderInt("B", (int*)&uiSlider.RGBvalue[BLUE_PIXEL], -100, 100);
-
-            for (int i = 0; i < 8; i++)
-            {
-                if (i > 0)
-                    ImGui::SameLine();
-                ImGui::PushID(0);
-                ImGui::PushStyleColor(ImGuiCol_Button, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 0.9f, 0.6f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 1.0f, 0.7f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, (ImVec4)ImColor::HSV(hsvValue[i] / 7.0f, 0.8f, 0.8f));
-                if (ImGui::Button(Color[i]))
-                    hsvIndex = i;
-                ImGui::PopStyleColor(3);
-                ImGui::PopID();
-            }
-
-            ImGui::PushID(hsvIndex);
-            ImGui::PushStyleColor(ImGuiCol_FrameBg, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.2f, 0.5f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgHovered, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.6f, 0.5f));
-            ImGui::PushStyleColor(ImGuiCol_FrameBgActive, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.7f, 0.5f));
-            ImGui::PushStyleColor(ImGuiCol_SliderGrab, (ImVec4)ImColor::HSV(hsvValue[hsvIndex] / 7.0f, 0.2f, 0.9f));
-            ImGui::SliderInt("H", (int*)&uiSlider.HSVvalue[hsvIndex *3], -100, 100);
-            ImGui::SliderInt("S", (int*)&uiSlider.HSVvalue[hsvIndex *3 +1], -100, 100);
-            ImGui::SliderInt("V", (int*)&uiSlider.HSVvalue[hsvIndex *3 +2], -100, 100);
-            ImGui::PopStyleColor(4);
-            ImGui::PopID();
-
-            ImGui::End();
-        }
-
-        // 3. Show another simple window.
-        if (show_another_window)
-        {
-            ImGui::Begin("HSY", &show_another_window);   // Pass a pointer to our bool variable (the window will have a closing button that will clear the bool when clicked)
-            ImGui::Text("HSY Select");
-
-
-
-            if (ImGui::Button("Close Me"))
-                show_another_window = false;
-            ImGui::End();
-        }
-
+        MainWindow(pixel);
         processor.process(pixel, uiSlider);
 
         // Upload pixels into texture
@@ -309,6 +307,7 @@ int main(int, char**)
 
     glfwDestroyWindow(window);
     glfwTerminate();
+    delete bMainWindow;
 
     return 0;
 }
