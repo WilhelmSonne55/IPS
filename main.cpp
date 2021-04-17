@@ -6,11 +6,16 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #define STB_IMAGE_IMPLEMENTATION
+
 #include "stb_image.h"
-#include <stdio.h>
+#include "parser.h"
+#include <iostream>
+#include <memory>
 
 #define DLL_IMPORT
 #include "BitMap.h"
+
+using namespace std;
 
 // About Desktop OpenGL function loaders:
 //  Modern desktop OpenGL doesn't have a standard portable header file to load OpenGL function pointers.
@@ -257,6 +262,8 @@ int main(int, char**)
     unsigned short* image = LoadTextureFromFile("345.jpg", &my_image_texture, &my_image_width, &my_image_height);
     Processor processor;
     BitMap* pixel = new BitMap(image, my_image_width, my_image_height, 4, 16);
+    unique_ptr<Parser> p = make_unique<ParserImpl>();
+    p->demosaic();
 
     // Main loop
     while (!glfwWindowShouldClose(window))

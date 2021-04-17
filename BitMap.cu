@@ -247,13 +247,12 @@ __global__ void getHistogram(unsigned short* devPtr, int width, int height, floa
 //  Function
 //========================================
 BitMap::BitMap(unsigned short* _data, int _width, int _height, int _channel, int _depth)
+	:data(_data),
+	width(_width),
+	height(_height),
+	channel(_channel),
+	depth(_depth)
 {
-	data = _data;
-	width = _width;
-	height = _height;
-	channel = _channel;
-	depth = _depth;
-
 	//binSize = 1<<depth;
 	binSize = MAX_BIN;
 	size = width*height*channel*sizeof(unsigned short);	

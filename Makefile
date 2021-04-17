@@ -8,7 +8,7 @@ NVCC = nvcc
 ## Sources code
 #---------------------
 #main file
-SOURCES += main.cpp 
+SOURCES += main.cpp parser.cpp
 
 #imgui wrapper
 SOURCES += ./imgui/imgui_impl_glfw.cpp ./imgui/imgui_impl_opengl3.cpp
@@ -34,7 +34,7 @@ LIBS += glfw3.lib gdi32.lib opengl32.lib shell32.lib BitMap.lib
 #---------------------
 CXXFLAGS = -I./include/ -I./imgui/ -DIMGUI_IMPL_OPENGL_LOADER_GL3W 
 CFLAGS = $(CXXFLAGS)
-CUDAFLAGS = --shared
+CUDAFLAGS = --shared -gencode=arch=compute_61,code=sm_61
 #---------------------
 ## Build Files
 #---------------------
