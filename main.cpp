@@ -107,11 +107,11 @@ unsigned short* LoadTextureFromFile(const char* filename, GLuint* out_texture, i
 
 void MainWindow(BitMap* pixel)
 {
-    ImGuiWindowFlags window_flags;
+    ImGuiWindowFlags window_flags = 0;
 
     window_flags |= ImGuiWindowFlags_NoScrollbar;
     window_flags |= ImGuiWindowFlags_MenuBar;
-    window_flags |= ImGuiWindowFlags_NoResize;
+    //window_flags |= ImGuiWindowFlags_NoResize;
     window_flags |= ImGuiWindowFlags_NoCollapse;
 
     if(bMainWindow == NULL)
@@ -123,7 +123,7 @@ void MainWindow(BitMap* pixel)
     ImGui::Separator();
     ImVec2 size = ImGui::GetItemRectSize();
     size.y = WIDGET_WIDTH;
-    ImGui::PlotHistogram("##values", pixel->getRhistogram(), 300, 0, NULL, 0.0f, 1.0f, size);
+    ImGui::PlotHistogram("##values", pixel->getRhistogram(), 256, 0, NULL, 0.0f, 1.0f, size);
 
     //RGB
     if (ImGui::CollapsingHeader("RGB"))
@@ -288,8 +288,7 @@ int main(int, char**)
         glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, my_image_width, my_image_height, 0, GL_RGBA, GL_UNSIGNED_SHORT, pixel->get_Image());
 
-        ImGui::Text("pointer = %p", my_image_texture);
-        ImGui::Text("size = %d x %d", PIC_WINDOW_WIDTH, PIC_WINDOW_HEIGHT);
+        ImGui::Text("image size = %d x %d", my_image_width, my_image_height);
         ImGui::Image((void*)(intptr_t)my_image_texture, ImVec2(PIC_WINDOW_WIDTH, PIC_WINDOW_HEIGHT));
         ImGui::End();
 

@@ -225,7 +225,7 @@ __global__ void getHistogram(unsigned short* devPtr, int width, int height, floa
 		RIndex = DEPTH_TO_INDEX(devPtr[offset*4 + RED_PIXEL]);
 		//GIndex = devPtr[offset*4 + GREEN_PIXEL];
 		//BIndex = devPtr[offset*4 + BLUE_PIXEL];
-		printf("RIndex:%d, devPtr[offset*4 + RED_PIXEL]:%d\n", RIndex, devPtr[offset*4 + RED_PIXEL]);
+		//printf("RIndex:%d, devPtr[offset*4 + RED_PIXEL]:%d\n", RIndex, devPtr[offset*4 + RED_PIXEL]);
 
 		atomicAdd(&Rtemp[RIndex], 1);
 		//atomicAdd(&Gtemp[GIndex], 1);
@@ -293,18 +293,12 @@ void BitMap::updateHistogram()
 
 	//prefer shared memory larger than L1 cache
 	//cudaThreadSetCacheConfig(cudaFuncCachePreferShared);
-
 	getHistogram<<<gridSize, blockSize>>>(devPtr, width, height, devHistogram.RHistogram);
 	
-	for(int i = 0; i<MAX_PIXEL; i++)
-	{
-		cudaMemcpy(histogram.RHistogram, devHistogram.RHistogram, sizeof(float)*MAX_BIN , cudaMemcpyDeviceToHost );
-	}
-	cout<<"RGBHistogram[i]:"<<histogram.RHistogram[0]<<endl;
-
+	//copy histogram
+	cudaMemcpy(histogram.RHistogram, devHistogram.RHistogram, sizeof(float)*MAX_BIN , cudaMemcpyDeviceToHost );
 
 	cudaFree(&devHistogram.RHistogram);
-
 	cudaFree(devPtr);	
 }
 

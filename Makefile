@@ -32,9 +32,9 @@ LIBS += glfw3.lib gdi32.lib opengl32.lib shell32.lib BitMap.lib
 #---------------------
 ## FLAGS
 #---------------------
-CXXFLAGS = -I./include/ -I./imgui/ -DIMGUI_IMPL_OPENGL_LOADER_GL3W 
+CXXFLAGS = -I./include/ -I./imgui/ -I. -DIMGUI_IMPL_OPENGL_LOADER_GL3W 
 CFLAGS = $(CXXFLAGS)
-CUDAFLAGS = --shared -gencode=arch=compute_61,code=sm_61
+CUDAFLAGS = --shared -gencode=arch=compute_61,code=sm_61 -w
 #---------------------
 ## Build Files
 #---------------------
