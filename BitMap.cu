@@ -192,14 +192,17 @@ __global__ void ConvertRGBtoHSV(unsigned short* devPtr, int width, int height, i
 	}
 }
 
-__global__ void getHistogram(unsigned short* devPtr, int width, int height, float* devHistogram)
+__global__ void getHistogram(unsigned short* devPtr, int width, int height, int* devHistogram)
 {
+	//tidx, tidy = 0~31
 	int tidx = blockIdx.x * blockDim.x + threadIdx.x;
 	int tidy = blockIdx.y * blockDim.y + threadIdx.y;
 
-	//thread in the same blocks using same share memory
-	int t = threadIdx.x + blockDim.x * threadIdx.y;
-	//total thread per block: 32*32
+	//thread in the "same blocks", which is different from tidx, tidy 
+	//,using same share memory
+	//0~1023
+	int t = threadIdx.y * blockDim.x + threadIdx.x;
+	//nt: total thread per block: 32*32=1024
 	int nt = blockDim.x * blockDim.y;
 
 	int offset = tidx + tidy * width;
@@ -210,17 +213,30 @@ __global__ void getHistogram(unsigned short* devPtr, int width, int height, floa
 	//__shared__ unsigned int Btemp[MAX_BIN];
 
 	//same block using same share memory
-	//even each block only 1024 threads, array size > 1024
-	//all need (0 ~ MAX_BIN) to reset each block
-	for(int i = t; i < MAX_BIN; i+=nt)
+	//even each block only 1024 threads, array size > 1024(block size)
+	//each thread must initialize more than one location
+	if(MAX_BIN > BLOCKSIZE)
 	{
-		Rtemp[i] = 0;
-		//Gtemp[i] = 0;
-		//Btemp[i] = 0;
+		// t represent for all thread in the same block
+		//+nt for next block
+		for(int i = t; i < MAX_BIN; i+=nt)
+		{
+			if(tidx < MAX_BIN)
+				Rtemp[i] = 0;
+			//Gtemp[i] = 0;
+			//Btemp[i] = 0;
+		}
 	}
+	else
+	{
+		//use the first thread of each block to init
+		if(t < MAX_BIN)
+			Rtemp[t] = 0;
+	}
+
 	__syncthreads();
 
-	if(tidx <= width && tidy <= height)
+	if(tidx < width && tidy < height)
 	{
 		RIndex = DEPTH_TO_INDEX(devPtr[offset*4 + RED_PIXEL]);
 		//GIndex = devPtr[offset*4 + GREEN_PIXEL];
@@ -233,25 +249,56 @@ __global__ void getHistogram(unsigned short* devPtr, int width, int height, floa
 	}
 	__syncthreads();
 
-	for(int i = t; i < MAX_BIN; i+=nt)
+	if(MAX_BIN > BLOCKSIZE)
 	{
-		//devHistogram[RED_PIXEL][i] = Rtemp[i];
-		atomicAdd(&(devHistogram[i]), Rtemp[i]);
-		//atomicAdd(&(devHistogram[GREEN_PIXEL][i]), Gtemp[i]);
-		//atomicAdd(&(devHistogram[BLUE_PIXEL][i]), Btemp[i]);
+		// t represent for all thread in the same block
+		//+nt for next block
+		for(int i = t; i < MAX_BIN; i+=nt)
+		{
+			if(i < MAX_BIN)
+				atomicAdd(&devHistogram[i], Rtemp[i]);
+			//Gtemp[i] = 0;
+			//Btemp[i] = 0;
+		}
 	}
-	
+	else
+	{
+		//use the first thread of each block to init
+		if(t < MAX_BIN)
+			atomicAdd(&devHistogram[t], Rtemp[t]);
+	}
 }
 
 //========================================
 //  Function
 //========================================
+Histogram::Histogram(int sum)
+{
+	RHist = new float[sum]{0};
+	GHist = new float[sum];
+	BHist = new float[sum];
+	YHist = new float[sum];
+}
+
+Histogram::~Histogram()
+{
+	if(RHist)
+		delete [] RHist;
+	if(GHist)
+		delete [] GHist;
+	if(BHist)
+		delete [] BHist;
+	if(YHist)	
+		delete [] YHist;
+}
+
 BitMap::BitMap(unsigned short* _data, int _width, int _height, int _channel, int _depth)
 	:data(_data),
 	width(_width),
 	height(_height),
 	channel(_channel),
-	depth(_depth)
+	depth(_depth),
+	info(_width*_height)
 {
 	//binSize = 1<<depth;
 	binSize = MAX_BIN;
@@ -259,14 +306,6 @@ BitMap::BitMap(unsigned short* _data, int _width, int _height, int _channel, int
 
 	proImage = new unsigned short[size];
 	memcpy(proImage , data, size);
-
-	histogram.RHistogram = new float [binSize];
-	histogram.GHistogram = new float [binSize];
-	histogram.BHistogram = new float [binSize];
-	histogram.YHistogram = new float [binSize];	
-	memset(histogram.RHistogram, 0, sizeof(float)*binSize);
-
-	//updateHistogram();
 }
 
 void BitMap::refresh()
@@ -281,24 +320,35 @@ void BitMap::updateHistogram()
 	dim3 gridSize(bx, by);
 	dim3 blockSize(BLOCKSIZE, BLOCKSIZE);
 	unsigned short* devPtr;
-	Histogram_Type devHistogram;
+	//Histogram* devHistogram;
+	int* devRHist;
 
 	//histogram malloc
-	cudaMalloc((void**)&devHistogram.RHistogram, sizeof(float)*MAX_BIN);
-	cudaMemset( devHistogram.RHistogram, 0x0, sizeof(float)*MAX_BIN);
-	
+	//cudaMalloc((void**)&devHistogram.RHist, sizeof(float)*width*height);
+	//cudaMemset( devHistogram.RHist, 0x0, sizeof(float)*width*height);
+	cudaMalloc((void**)&devRHist, sizeof(int)*MAX_BIN);
+	cudaMemset(devRHist, 0x0, sizeof(int)*MAX_BIN);
+
 	//image malloc
 	cudaMalloc( (void**)&devPtr, size);
 	cudaMemcpy( devPtr, proImage, size, cudaMemcpyHostToDevice);
 
 	//prefer shared memory larger than L1 cache
 	//cudaThreadSetCacheConfig(cudaFuncCachePreferShared);
-	getHistogram<<<gridSize, blockSize>>>(devPtr, width, height, devHistogram.RHistogram);
-	
-	//copy histogram
-	cudaMemcpy(histogram.RHistogram, devHistogram.RHistogram, sizeof(float)*MAX_BIN , cudaMemcpyDeviceToHost );
+	//getHistogram<<<gridSize, blockSize>>>(devPtr, width, height, devHistogram.RHist);
+	getHistogram<<<gridSize, blockSize>>>(devPtr, width, height, devRHist);
 
-	cudaFree(&devHistogram.RHistogram);
+	//copy histogram
+	//cudaMemcpy(info.RHist, devHistogram.RHist, sizeof(float)*width*height , cudaMemcpyDeviceToHost );
+
+	int data[MAX_BIN] = {0};
+	cudaMemcpy(data, devRHist, sizeof(int)*MAX_BIN , cudaMemcpyDeviceToHost );
+	
+	//cudaMemcpy(info.RHist, devRHist, sizeof(float)*width*height , cudaMemcpyDeviceToHost );
+	for(int i = 0; i < MAX_BIN; i++)
+		cout<<"i:"<<i<<" rhis:"<<data[i]<<endl;
+
+	cudaFree(devRHist);
 	cudaFree(devPtr);	
 }
 

@@ -104,7 +104,7 @@ unsigned short* LoadTextureFromFile(const char* filename, GLuint* out_texture, i
     return image_data;
 }
 
-
+//widget for the tool
 void MainWindow(BitMap* pixel)
 {
     ImGuiWindowFlags window_flags = 0;
@@ -123,7 +123,7 @@ void MainWindow(BitMap* pixel)
     ImGui::Separator();
     ImVec2 size = ImGui::GetItemRectSize();
     size.y = WIDGET_WIDTH;
-    ImGui::PlotHistogram("##values", pixel->getRhistogram(), 256, 0, NULL, 0.0f, 1.0f, size);
+    ImGui::PlotHistogram("##values", pixel->info.getRHist(), 256, 0, NULL, 0.0f, 1.0f, size);
 
     //RGB
     if (ImGui::CollapsingHeader("RGB"))

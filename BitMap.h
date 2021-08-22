@@ -61,17 +61,30 @@ typedef struct{
 	int HSVvalue[HSV_MAX_TYPE] = {0};
 }COLOR_ITEMS;
 
-typedef struct{
-	float* RHistogram;
-	float* GHistogram;
-	float* BHistogram;
-	float* YHistogram;
-}Histogram_Type;
+//histogram information
+class DLL Histogram
+{
+ public:
+	//for cuda device
+	Histogram() = default;
+	Histogram(int size);
+	~Histogram();
+
+    float* getRHist(){return RHist;}
+    float* getGHist(){return GHist;}
+    float* getBHist(){return BHist;}
+    float* getYHist(){return YHist;}
+	void update();
+
+	float* RHist;
+	float* GHist;
+	float* BHist;
+	float* YHist;
+};
 
 class DLL BitMap
 {
-	public:
-	
+ public:	
 	BitMap(unsigned short* _data, int _width, int _height, int _channel, int _depth);
     unsigned short* get_data( void ) const   { return data; }
     unsigned int get_width( void ) const   { return width; }
@@ -79,17 +92,17 @@ class DLL BitMap
     unsigned int get_channel( void ) const   { return channel; }
     unsigned int get_size( void ) const   { return size; }
     unsigned int get_depth( void ) const   { return depth; }
-	unsigned short* get_Image (void) {return proImage;};
-	float* getYhistogram (void) {return histogram.YHistogram; }
-	float* getRhistogram (void) {return histogram.RHistogram; }
-	float* getGhistogram (void) {return histogram.GHistogram; }
-	float* getBhistogram (void) {return histogram.BHistogram; }
+	unsigned short* get_Image (void) {return proImage;}
 
 	void refresh();
 	void updateHistogram();
 
-	private:
-	Histogram_Type histogram;
+	//histogram 
+	Histogram info;
+
+ private:
+
+
 	unsigned short* data;
 	unsigned short* proImage;
 
@@ -112,7 +125,5 @@ class DLL Processor
 	private:
 	COLOR_ITEMS slider;
 };
-
-
 
 #endif
